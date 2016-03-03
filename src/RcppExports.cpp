@@ -63,8 +63,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // solvealg
-SEXP solvealg(arma::mat X, arma::mat X_inquantile, arma::vec t_obs, arma::vec censoring, arma::vec A, int k, int max_n);
-RcppExport SEXP test_solvealg(SEXP XSEXP, SEXP X_inquantileSEXP, SEXP t_obsSEXP, SEXP censoringSEXP, SEXP ASEXP, SEXP kSEXP, SEXP max_nSEXP) {
+SEXP solvealg(arma::mat X, arma::mat X_inquantile, arma::vec t_obs, arma::vec censoring, arma::vec A, int k, int max_n, int fix_beta);
+RcppExport SEXP test_solvealg(SEXP XSEXP, SEXP X_inquantileSEXP, SEXP t_obsSEXP, SEXP censoringSEXP, SEXP ASEXP, SEXP kSEXP, SEXP max_nSEXP, SEXP fix_betaSEXP) {
 BEGIN_RCPP
     Rcpp::RObject __result;
     Rcpp::RNGScope __rngScope;
@@ -75,7 +75,8 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< arma::vec >::type A(ASEXP);
     Rcpp::traits::input_parameter< int >::type k(kSEXP);
     Rcpp::traits::input_parameter< int >::type max_n(max_nSEXP);
-    __result = Rcpp::wrap(solvealg(X, X_inquantile, t_obs, censoring, A, k, max_n));
+    Rcpp::traits::input_parameter< int >::type fix_beta(fix_betaSEXP);
+    __result = Rcpp::wrap(solvealg(X, X_inquantile, t_obs, censoring, A, k, max_n, fix_beta));
     return __result;
 END_RCPP
 }

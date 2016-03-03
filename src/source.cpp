@@ -169,7 +169,7 @@ template <class T> const T& max (const T& a, const T& b) {
 // [[Rcpp::depends("RcppArmadillo")]]
 // [[Rcpp::export]]
 SEXP solvealg(arma::mat X, arma::mat X_inquantile, arma::vec t_obs, 
-           arma::vec censoring, arma::vec A, int k, int max_n){
+           arma::vec censoring, arma::vec A, int k, int max_n, int fix_beta){
   // environmental parameters
   Rcpp::Environment splines("package:splines");
   Rcpp::Function splines_des = splines["spline.des"];  
@@ -188,7 +188,7 @@ SEXP solvealg(arma::mat X, arma::mat X_inquantile, arma::vec t_obs,
   arma::vec a_new = arma::zeros<arma::vec>(10);
   arma::vec a_old = a_new;
   arma::vec b_new = arma::zeros<arma::vec>(10);
-  b_new(9) = -1;
+  b_new(9) = fix_beta;
   arma::vec b_old = b_new;
   arma::vec c_new = arma::zeros<arma::vec>(k + 1);
   arma::vec c_old = c_new;
