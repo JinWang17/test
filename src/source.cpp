@@ -9,7 +9,8 @@ using namespace std;
 arma::vec opt_ac(const arma::vec& a_old, const arma::vec& c_old, 
                  const arma::mat& bs, const arma::mat& bs_der, 
                  const arma::vec& A, const arma::mat& X, 
-                 const arma::vec& delta, const arma::vec& tobs){
+                 const arma::vec& delta, const arma::vec& tobs,
+                 const double& stable){
   // initialization
   int sample = delta.n_elem;
   int size = a_old.n_elem + c_old.n_elem;
@@ -43,16 +44,24 @@ arma::vec opt_ac(const arma::vec& a_old, const arma::vec& c_old,
   // the problem is of the format min (1/2b^tDb - d^tb) s.t. (A0^tb >= b0)
   arma::mat D = arma::zeros<arma::mat>(size, size);
   arma::vec d = arma::zeros<arma::vec>(size);
-  arma::mat A0 = arma::zeros<arma::mat>(size, bs_der.n_rows);
-  arma::vec b0 = arma::zeros<arma::vec>(bs_der.n_rows);
+  arma::mat A0 = arma::zeros<arma::mat>(size, bs_der.n_rows + 2 * size);
+  arma::vec b0 = arma::zeros<arma::vec>(bs_der.n_rows + 2 * size);
 	for (int i = 0; i < sample; i++) {
 		if (delta[i] == 1) {
       D += s2.slice(i)/s0(i) - s1.row(i).t() * s1.row(i) / (s0(i) * s0(i));
       d += matrix.row(i).t() - s1.row(i).t() / s0(i);
  		}
 	}
-  A0.rows(a_old.n_elem, size - 1) = bs_der.t();
-  b0 = -bs_der * c_old;
+  // non decreasing
+  A0.submat(a_old.n_elem, 0, size - 1, bs_der.n_rows - 1) = bs_der.t();
+  b0.head(bs_der.n_rows) = -bs_der * c_old;
+  // robustness
+  A0.cols(bs_der.n_rows, bs_der.n_rows + size - 1) = arma::eye(size, size);
+  A0.cols(bs_der.n_rows + size, bs_der.n_rows + 2 * size - 1) = 
+                                                    -arma::eye(size, size);
+  b0.tail(2 * size).fill(-stable);
+  b0.subvec(bs_der.n_rows, bs_der.n_rows + size - 1) -= param;
+  b0.subvec(bs_der.n_rows + size, bs_der.n_rows+2*size-1) += param;
   
   // call solve_qp to solve the quadratic programming problem
   List sol = solve_qp(D, d, A0, b0);
@@ -231,11 +240,13 @@ void cal_knots(const arma::mat& X_inquantile, const arma::vec& b_new,
 // [[Rcpp::depends("RcppArmadillo")]]
 // [[Rcpp::export]]
 SEXP solvealg(arma::mat X, arma::mat X_inquantile, arma::vec t_obs, 
-           arma::vec censoring, arma::vec A, int k, int max_n, double fix_beta){
+              arma::vec censoring, arma::vec A, int k, int max_n, 
+              double fix_beta, double stable = 100){
   const double thre_alpha = 1e-5;
   const double thre_beta = 1e-5;
   const double thre_gamma = 1e-5;
 	const double thre_lik = 1e-5;
+  const double stable_gamma = 100;
   const int order = 3; // quadratic splines
   int max_count = max_n; // maximum number of iterations allowed
   
@@ -246,6 +257,7 @@ SEXP solvealg(arma::mat X, arma::mat X_inquantile, arma::vec t_obs,
   b_new(9) = fix_beta;
   arma::vec b_old = b_new;
   arma::vec c_new = arma::zeros<arma::vec>(k + 1);
+//  arma::vec c_new_s = c_new;
   arma::vec c_old = c_new;
   double lik_old = -HUGE_VAL;
 	double lik_new = -HUGE_VAL;
@@ -262,14 +274,23 @@ SEXP solvealg(arma::mat X, arma::mat X_inquantile, arma::vec t_obs,
     // calculate the knots
     arma::mat bs, bs_der, bs_der_all;
     arma::vec k_knots;
-    cal_knots(X_inquantile, b_new, X, k, order, k_knots, bs, bs_der, bs_der_all);
+    cal_knots(X_inquantile, b_new, X, k, order,k_knots, bs, bs_der, bs_der_all);
     
     // optimize over alpha and gamma
     arma::vec change_ac = opt_ac(a_old, c_old, bs, bs_der, A, X, 
-                                 censoring, t_obs);
+                                 censoring, t_obs, stable);
     a_new += change_ac.head(a_new.n_elem);
     c_new += change_ac.tail(c_new.n_elem);
-  
+/*    // stablize c_new
+    for (int i = 0; i < c_new.n_elem; i++){
+      if (abs(c_new(i)) >= stable_gamma){
+        c_new_s = 0;
+      }
+      else{
+        
+      }
+    }
+*/  
     // optimize over beta
     arma::vec change_b = opt_b(a_new, b_old, c_new, bs, bs_der_all, 
                                A, X, censoring, t_obs);
@@ -366,7 +387,8 @@ SEXP test_splines(arma::mat X, arma::mat X_inquantile, arma::vec beta,
 SEXP opt_ac_test(const arma::vec& a_old, const arma::vec& c_old, 
                  const arma::mat& bs, const arma::mat& bs_der, 
                  const arma::vec& A, const arma::mat& X, 
-                 const arma::vec& delta, const arma::vec& tobs){
+                 const arma::vec& delta, const arma::vec& tobs, 
+                 const int& stable){
   // initialization
   int sample = delta.n_elem;
   int size = a_old.n_elem + c_old.n_elem;
@@ -400,16 +422,24 @@ SEXP opt_ac_test(const arma::vec& a_old, const arma::vec& c_old,
   // the problem is of the format min (1/2b^tDb - d^tb) s.t. (A0^tb >= b0)
   arma::mat D = arma::zeros<arma::mat>(size, size);
   arma::vec d = arma::zeros<arma::vec>(size);
-  arma::mat A0 = arma::zeros<arma::mat>(size, bs_der.n_rows);
-  arma::vec b0 = arma::zeros<arma::vec>(bs_der.n_rows);
-	for (int i = 0; i < sample; i++) {
+  arma::mat A0 = arma::zeros<arma::mat>(size, bs_der.n_rows + 2 * size);
+  arma::vec b0 = arma::zeros<arma::vec>(bs_der.n_rows + 2 * size);
+  for (int i = 0; i < sample; i++) {
 		if (delta[i] == 1) {
       D += s2.slice(i)/s0(i) - s1.row(i).t() * s1.row(i) / (s0(i) * s0(i));
       d += matrix.row(i).t() - s1.row(i).t() / s0(i);
  		}
 	}
-  A0.rows(a_old.n_elem, size - 1) = bs_der.t();
-  b0 = -bs_der * c_old;
+  // non decreasing
+  A0.submat(a_old.n_elem, 0, size - 1, bs_der.n_rows - 1) = bs_der.t();
+  b0.head(bs_der.n_rows) = -bs_der * c_old;
+  // robustness
+  A0.cols(bs_der.n_rows, bs_der.n_rows + size - 1) = arma::eye(size, size);
+  A0.cols(bs_der.n_rows + size, bs_der.n_rows + 2 * size - 1) = 
+                                                    -arma::eye(size, size);
+  b0.subvec(bs_der.n_rows, bs_der.n_rows + size - 1).fill(-stable);
+  b0.subvec(bs_der.n_rows + size, bs_der.n_rows+2*size-1).fill(-stable);
+  
   
   // call solve_qp to solve the quadratic programming problem
 //  List sol = solve_qp(D, d, A0, b0);
@@ -418,6 +448,8 @@ SEXP opt_ac_test(const arma::vec& a_old, const arma::vec& c_old,
   // return increase
 //  return increase;
   return Rcpp::List::create(Rcpp::Named("D") = D,
+                            Rcpp::Named("d") = d,
+                            Rcpp::Named("A0") = A0,
                             Rcpp::Named("b0") = b0,
                             Rcpp::Named("s0") = s0,
                             Rcpp::Named("s1") = s1,

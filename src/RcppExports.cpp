@@ -7,8 +7,8 @@
 using namespace Rcpp;
 
 // opt_ac
-arma::vec opt_ac(const arma::vec& a_old, const arma::vec& c_old, const arma::mat& bs, const arma::mat& bs_der, const arma::vec& A, const arma::mat& X, const arma::vec& delta, const arma::vec& tobs);
-RcppExport SEXP test_opt_ac(SEXP a_oldSEXP, SEXP c_oldSEXP, SEXP bsSEXP, SEXP bs_derSEXP, SEXP ASEXP, SEXP XSEXP, SEXP deltaSEXP, SEXP tobsSEXP) {
+arma::vec opt_ac(const arma::vec& a_old, const arma::vec& c_old, const arma::mat& bs, const arma::mat& bs_der, const arma::vec& A, const arma::mat& X, const arma::vec& delta, const arma::vec& tobs, const double& stable);
+RcppExport SEXP test_opt_ac(SEXP a_oldSEXP, SEXP c_oldSEXP, SEXP bsSEXP, SEXP bs_derSEXP, SEXP ASEXP, SEXP XSEXP, SEXP deltaSEXP, SEXP tobsSEXP, SEXP stableSEXP) {
 BEGIN_RCPP
     Rcpp::RObject __result;
     Rcpp::RNGScope __rngScope;
@@ -20,7 +20,8 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< const arma::mat& >::type X(XSEXP);
     Rcpp::traits::input_parameter< const arma::vec& >::type delta(deltaSEXP);
     Rcpp::traits::input_parameter< const arma::vec& >::type tobs(tobsSEXP);
-    __result = Rcpp::wrap(opt_ac(a_old, c_old, bs, bs_der, A, X, delta, tobs));
+    Rcpp::traits::input_parameter< const double& >::type stable(stableSEXP);
+    __result = Rcpp::wrap(opt_ac(a_old, c_old, bs, bs_der, A, X, delta, tobs, stable));
     return __result;
 END_RCPP
 }
@@ -62,9 +63,27 @@ BEGIN_RCPP
     return __result;
 END_RCPP
 }
+// cal_knots
+void cal_knots(const arma::mat& X_inquantile, const arma::vec& b_new, const arma::mat& X, int k, int order, arma::vec& k_knots, arma::mat& bs, arma::mat& bs_der, arma::mat& bs_der_all);
+RcppExport SEXP test_cal_knots(SEXP X_inquantileSEXP, SEXP b_newSEXP, SEXP XSEXP, SEXP kSEXP, SEXP orderSEXP, SEXP k_knotsSEXP, SEXP bsSEXP, SEXP bs_derSEXP, SEXP bs_der_allSEXP) {
+BEGIN_RCPP
+    Rcpp::RNGScope __rngScope;
+    Rcpp::traits::input_parameter< const arma::mat& >::type X_inquantile(X_inquantileSEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type b_new(b_newSEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type X(XSEXP);
+    Rcpp::traits::input_parameter< int >::type k(kSEXP);
+    Rcpp::traits::input_parameter< int >::type order(orderSEXP);
+    Rcpp::traits::input_parameter< arma::vec& >::type k_knots(k_knotsSEXP);
+    Rcpp::traits::input_parameter< arma::mat& >::type bs(bsSEXP);
+    Rcpp::traits::input_parameter< arma::mat& >::type bs_der(bs_derSEXP);
+    Rcpp::traits::input_parameter< arma::mat& >::type bs_der_all(bs_der_allSEXP);
+    cal_knots(X_inquantile, b_new, X, k, order, k_knots, bs, bs_der, bs_der_all);
+    return R_NilValue;
+END_RCPP
+}
 // solvealg
-SEXP solvealg(arma::mat X, arma::mat X_inquantile, arma::vec t_obs, arma::vec censoring, arma::vec A, int k, int max_n, int fix_beta);
-RcppExport SEXP test_solvealg(SEXP XSEXP, SEXP X_inquantileSEXP, SEXP t_obsSEXP, SEXP censoringSEXP, SEXP ASEXP, SEXP kSEXP, SEXP max_nSEXP, SEXP fix_betaSEXP) {
+SEXP solvealg(arma::mat X, arma::mat X_inquantile, arma::vec t_obs, arma::vec censoring, arma::vec A, int k, int max_n, double fix_beta, double stable);
+RcppExport SEXP test_solvealg(SEXP XSEXP, SEXP X_inquantileSEXP, SEXP t_obsSEXP, SEXP censoringSEXP, SEXP ASEXP, SEXP kSEXP, SEXP max_nSEXP, SEXP fix_betaSEXP, SEXP stableSEXP) {
 BEGIN_RCPP
     Rcpp::RObject __result;
     Rcpp::RNGScope __rngScope;
@@ -75,8 +94,9 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< arma::vec >::type A(ASEXP);
     Rcpp::traits::input_parameter< int >::type k(kSEXP);
     Rcpp::traits::input_parameter< int >::type max_n(max_nSEXP);
-    Rcpp::traits::input_parameter< int >::type fix_beta(fix_betaSEXP);
-    __result = Rcpp::wrap(solvealg(X, X_inquantile, t_obs, censoring, A, k, max_n, fix_beta));
+    Rcpp::traits::input_parameter< double >::type fix_beta(fix_betaSEXP);
+    Rcpp::traits::input_parameter< double >::type stable(stableSEXP);
+    __result = Rcpp::wrap(solvealg(X, X_inquantile, t_obs, censoring, A, k, max_n, fix_beta, stable));
     return __result;
 END_RCPP
 }
@@ -98,8 +118,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // opt_ac_test
-SEXP opt_ac_test(const arma::vec& a_old, const arma::vec& c_old, const arma::mat& bs, const arma::mat& bs_der, const arma::vec& A, const arma::mat& X, const arma::vec& delta, const arma::vec& tobs);
-RcppExport SEXP test_opt_ac_test(SEXP a_oldSEXP, SEXP c_oldSEXP, SEXP bsSEXP, SEXP bs_derSEXP, SEXP ASEXP, SEXP XSEXP, SEXP deltaSEXP, SEXP tobsSEXP) {
+SEXP opt_ac_test(const arma::vec& a_old, const arma::vec& c_old, const arma::mat& bs, const arma::mat& bs_der, const arma::vec& A, const arma::mat& X, const arma::vec& delta, const arma::vec& tobs, const int& stable);
+RcppExport SEXP test_opt_ac_test(SEXP a_oldSEXP, SEXP c_oldSEXP, SEXP bsSEXP, SEXP bs_derSEXP, SEXP ASEXP, SEXP XSEXP, SEXP deltaSEXP, SEXP tobsSEXP, SEXP stableSEXP) {
 BEGIN_RCPP
     Rcpp::RObject __result;
     Rcpp::RNGScope __rngScope;
@@ -111,7 +131,8 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< const arma::mat& >::type X(XSEXP);
     Rcpp::traits::input_parameter< const arma::vec& >::type delta(deltaSEXP);
     Rcpp::traits::input_parameter< const arma::vec& >::type tobs(tobsSEXP);
-    __result = Rcpp::wrap(opt_ac_test(a_old, c_old, bs, bs_der, A, X, delta, tobs));
+    Rcpp::traits::input_parameter< const int& >::type stable(stableSEXP);
+    __result = Rcpp::wrap(opt_ac_test(a_old, c_old, bs, bs_der, A, X, delta, tobs, stable));
     return __result;
 END_RCPP
 }
