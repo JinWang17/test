@@ -2,38 +2,70 @@
 # Generator token: 10BE3573-1514-4C36-9D1C-5A225CD40393
 
 opt_ac <- function(a_old, c_old, bs, bs_der, A, X, delta, tobs, stable) {
-    .Call('test_opt_ac', PACKAGE = 'test', a_old, c_old, bs, bs_der, A, X, delta, tobs, stable)
+    .Call('test2_opt_ac', PACKAGE = 'test2', a_old, c_old, bs, bs_der, A, X, delta, tobs, stable)
 }
 
 opt_b <- function(a_new, b_old, c_new, bs, bs_der_all, A, X, delta, tobs) {
-    .Call('test_opt_b', PACKAGE = 'test', a_new, b_old, c_new, bs, bs_der_all, A, X, delta, tobs)
+    .Call('test2_opt_b', PACKAGE = 'test2', a_new, b_old, c_new, bs, bs_der_all, A, X, delta, tobs)
 }
 
 likeli <- function(a, b, c, A, X, delta, tobs, knots, order) {
-    .Call('test_likeli', PACKAGE = 'test', a, b, c, A, X, delta, tobs, knots, order)
+    .Call('test2_likeli', PACKAGE = 'test2', a, b, c, A, X, delta, tobs, knots, order)
+}
+
+max_diff <- function(x, y) {
+    .Call('test2_max_diff', PACKAGE = 'test2', x, y)
 }
 
 cal_knots <- function(X_inquantile, b_new, X, k, order, k_knots, bs, bs_der, bs_der_all) {
-    invisible(.Call('test_cal_knots', PACKAGE = 'test', X_inquantile, b_new, X, k, order, k_knots, bs, bs_der, bs_der_all))
+    invisible(.Call('test2_cal_knots', PACKAGE = 'test2', X_inquantile, b_new, X, k, order, k_knots, bs, bs_der, bs_der_all))
 }
 
-solvealg <- function(X, X_inquantile, t_obs, censoring, A, k, max_n, fix_beta, stable) {
-    .Call('test_solvealg', PACKAGE = 'test', X, X_inquantile, t_obs, censoring, A, k, max_n, fix_beta, stable)
+solvealg <- function(X, X_inquantile, t_obs, censoring, A, k, max_n, stable, fix_beta, debug = 0L) {
+    .Call('test2_solvealg', PACKAGE = 'test2', X, X_inquantile, t_obs, censoring, A, k, max_n, stable, fix_beta, debug)
 }
 
 test_splines <- function(X, X_inquantile, beta, knots, dev, order, k) {
-    .Call('test_test_splines', PACKAGE = 'test', X, X_inquantile, beta, knots, dev, order, k)
+    .Call('test2_test_splines', PACKAGE = 'test2', X, X_inquantile, beta, knots, dev, order, k)
 }
 
 opt_ac_test <- function(a_old, c_old, bs, bs_der, A, X, delta, tobs, stable) {
-    .Call('test_opt_ac_test', PACKAGE = 'test', a_old, c_old, bs, bs_der, A, X, delta, tobs, stable)
+    .Call('test2_opt_ac_test', PACKAGE = 'test2', a_old, c_old, bs, bs_der, A, X, delta, tobs, stable)
 }
 
 opt_b_test <- function(a_new, b_old, c_new, bs, bs_der_all, A, X, delta, tobs) {
-    .Call('test_opt_b_test', PACKAGE = 'test', a_new, b_old, c_new, bs, bs_der_all, A, X, delta, tobs)
+    .Call('test2_opt_b_test', PACKAGE = 'test2', a_new, b_old, c_new, bs, bs_der_all, A, X, delta, tobs)
 }
 
 opt_b_QP <- function(a_new, b_old, c_new, bs, bs_der_all, A, X, delta, tobs) {
-    .Call('test_opt_b_QP', PACKAGE = 'test', a_new, b_old, c_new, bs, bs_der_all, A, X, delta, tobs)
+    .Call('test2_opt_b_QP', PACKAGE = 'test2', a_new, b_old, c_new, bs, bs_der_all, A, X, delta, tobs)
+}
+
+opt_ac_compare <- function(a_old, c_old, bs, A, X, delta, tobs) {
+    .Call('test2_opt_ac_compare', PACKAGE = 'test2', a_old, c_old, bs, A, X, delta, tobs)
+}
+
+opt_a_compare <- function(a_old, A, X, delta, tobs) {
+    .Call('test2_opt_a_compare', PACKAGE = 'test2', a_old, A, X, delta, tobs)
+}
+
+opt_c <- function(c_old, bs, bs_der, A, X, delta, tobs, stable) {
+    .Call('test2_opt_c', PACKAGE = 'test2', c_old, bs, bs_der, A, X, delta, tobs, stable)
+}
+
+opt_c_us <- function(c_old, bs, bs_der, A, X, delta, tobs, stable) {
+    .Call('test2_opt_c_us', PACKAGE = 'test2', c_old, bs, bs_der, A, X, delta, tobs, stable)
+}
+
+opt_c_compare <- function(c_old, bs, bs_der, A, X, delta, tobs, stable) {
+    .Call('test2_opt_c_compare', PACKAGE = 'test2', c_old, bs, bs_der, A, X, delta, tobs, stable)
+}
+
+opt_c_id <- function(c_old, bs, bs_der, A, X, delta, tobs, stable, at0) {
+    .Call('test2_opt_c_id', PACKAGE = 'test2', c_old, bs, bs_der, A, X, delta, tobs, stable, at0)
+}
+
+opt_c_id_ori <- function(c_old, bs, bs_der, A, X, delta, tobs, stable, at0) {
+    .Call('test2_opt_c_id_ori', PACKAGE = 'test2', c_old, bs, bs_der, A, X, delta, tobs, stable, at0)
 }
 

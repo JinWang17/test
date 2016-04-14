@@ -3,7 +3,6 @@
 using namespace Rcpp;
 using namespace std;
 
-
 // [[Rcpp::depends("RcppArmadillo")]]
 // [[Rcpp::export]]
 arma::vec opt_ac(const arma::vec& a_old, const arma::vec& c_old, 
@@ -122,12 +121,12 @@ arma::vec opt_b(const arma::vec& a_new, const arma::vec& b_old,
       d += A(i) * diff_psi(i) * X.row(i).t() - s1.row(i).t() / s0(i);
  		}
 	}
-  arma::mat D_tilde = D.submat(0, 0, 8, 8);
-  arma::vec d_tilde = d.head(9);
+  arma::mat D_tilde = D.submat(0, 0, size - 2, size - 2);
+  arma::vec d_tilde = d.head(size - 1);
   
   // one step Newton for the quadratic problem  
   arma::vec increase = arma::zeros<arma::vec>(size);
-  increase.head(9) = solve(D_tilde, d_tilde);
+  increase.head(size - 1) = solve(D_tilde, d_tilde);
 
   // return increase
   return increase;
@@ -170,7 +169,8 @@ double likeli(const arma::vec& a, const arma::vec& b, const arma::vec& c,
   return lik;
 }
 
-
+// [[Rcpp::depends("RcppArmadillo")]]
+// [[Rcpp::export]]
 double max_diff(const arma::vec& x, const arma::vec& y){
   if (x.n_elem != y.n_elem){
     cout << "the lengths of the two vectors don't match";
@@ -241,7 +241,7 @@ void cal_knots(const arma::mat& X_inquantile, const arma::vec& b_new,
 // [[Rcpp::export]]
 SEXP solvealg(arma::mat X, arma::mat X_inquantile, arma::vec t_obs, 
               arma::vec censoring, arma::vec A, int k, int max_n, 
-              double fix_beta, double stable = 100){
+              double stable, arma::vec fix_beta, int debug = 0){
   const double thre_alpha = 1e-5;
   const double thre_beta = 1e-5;
   const double thre_gamma = 1e-5;
@@ -249,12 +249,13 @@ SEXP solvealg(arma::mat X, arma::mat X_inquantile, arma::vec t_obs,
   const double stable_gamma = 100;
   const int order = 3; // quadratic splines
   int max_count = max_n; // maximum number of iterations allowed
+  int len = X.n_cols;
   
   // initiation
-  arma::vec a_new = arma::zeros<arma::vec>(10);
+  arma::vec a_new = arma::zeros<arma::vec>(len);
   arma::vec a_old = a_new;
-  arma::vec b_new = arma::zeros<arma::vec>(10);
-  b_new(9) = fix_beta;
+  arma::vec b_new = fix_beta;
+  b_new = arma::normalise(b_new);
   arma::vec b_old = b_new;
   arma::vec c_new = arma::zeros<arma::vec>(k + 1);
 //  arma::vec c_new_s = c_new;
@@ -264,7 +265,7 @@ SEXP solvealg(arma::mat X, arma::mat X_inquantile, arma::vec t_obs,
 	double a_diff, b_diff, c_diff, lik_diff;
   int converge = 0;
 	int count = 0;
-  arma::vec knots(k+4);
+  arma::vec knots(k + 4);
   int conv_type = 0;
 	
   // start the optimization algorithm
@@ -272,11 +273,17 @@ SEXP solvealg(arma::mat X, arma::mat X_inquantile, arma::vec t_obs,
     count++;
     
     // calculate the knots
+    if (debug == 1){
+      cout << "calculate the knots" << endl;  
+    }
     arma::mat bs, bs_der, bs_der_all;
     arma::vec k_knots;
     cal_knots(X_inquantile, b_new, X, k, order,k_knots, bs, bs_der, bs_der_all);
     
     // optimize over alpha and gamma
+    if (debug == 1){
+      cout << "optimize over alpha and gamma" << endl;
+    }
     arma::vec change_ac = opt_ac(a_old, c_old, bs, bs_der, A, X, 
                                  censoring, t_obs, stable);
     a_new += change_ac.head(a_new.n_elem);
@@ -292,14 +299,20 @@ SEXP solvealg(arma::mat X, arma::mat X_inquantile, arma::vec t_obs,
     }
 */  
     // optimize over beta
+    if (debug == 1){
+      cout << "optimize over beta" << endl;
+    } 
     arma::vec change_b = opt_b(a_new, b_old, c_new, bs, bs_der_all, 
                                A, X, censoring, t_obs);
     b_new += change_b;
     // normalize beta, shouldn't affect anything but increase the 
     // robustness of beta
-    b_new = normalise(b_new);
+    b_new = arma::normalise(b_new);
 
     // calculate likelihood
+    if (debug == 1){
+      cout << "calculate likelihood" << endl;
+    } 
     lik_new = likeli(a_new, b_new, c_new, A, X,
                      censoring, t_obs, k_knots, order);
     
@@ -307,7 +320,12 @@ SEXP solvealg(arma::mat X, arma::mat X_inquantile, arma::vec t_obs,
     a_diff = max_diff(a_new, a_old);
     b_diff = max_diff(b_new, b_old);
     c_diff = max_diff(c_new, c_old);
-    lik_diff = (lik_new - lik_old) / lik_old;
+    if ((lik_old) < -1e6){
+      lik_diff = abs(lik_new - lik_old); 
+    }
+    else{
+      lik_diff = abs(lik_new - lik_old) / abs(lik_old);
+    }
     if((a_diff <= thre_alpha) && (b_diff <= thre_beta) && (c_diff <= thre_gamma)
        && (lik_diff <= thre_lik)){
       converge = 1;
@@ -574,4 +592,465 @@ arma::vec opt_b_QP(const arma::vec& a_new, const arma::vec& b_old,
 
   // return increase
   return increase;
+}
+
+
+// [[Rcpp::depends("RcppArmadillo")]]
+// [[Rcpp::export]]
+arma::vec opt_ac_compare(const arma::vec& a_old, const arma::vec& c_old, 
+                 const arma::mat& bs, const arma::vec& A, const arma::mat& X, 
+                 const arma::vec& delta, const arma::vec& tobs){
+  // initialization
+  int sample = delta.n_elem;
+  int size = a_old.n_elem + c_old.n_elem;
+  arma::vec param(size);
+  param.head(a_old.n_elem) = a_old;
+  param.tail(c_old.n_elem) = c_old;
+  arma::mat matrix(sample, size);
+  matrix.cols(0, a_old.n_elem - 1) = X;
+  for (int i = a_old.n_elem; i < size; i++){
+    matrix.col(i) = bs.col(i - a_old.n_elem) % A;
+  }  
+  Rcpp::Environment quadprog("package:quadprog");
+  Rcpp::Function solve_qp = quadprog["solve.QP"];
+  
+  //cout << "initialization" << endl; 
+  
+  // so, s1, s2
+  arma::vec s0 = arma::zeros<arma::vec>(sample);
+  arma::mat s1 = arma::zeros<arma::mat>(sample, size);
+  arma::cube s2 = arma::zeros<arma::cube>(size, size, sample);
+  for (int j = 0; j < sample; j++) {
+    double temp = exp(arma::as_scalar(matrix.row(j) * param));
+    for (int i = 0; i < sample; i++) {
+      if ((delta(i) == 1) && (tobs(j) >= tobs(i))) {
+        s0(i) += temp;
+  			s1.row(i) += temp * matrix.row(j);
+        s2.slice(i) += temp * matrix.row(j).t() * matrix.row(j);
+      }
+    }
+  }
+  
+ // cout << "s0-s2" << endl;
+  
+  // create D, d, A0, b0 to be used in the solve.qp 
+  // the problem is of the format min (1/2b^tDb - d^tb) s.t. (A0^tb >= b0)
+  arma::mat D = arma::zeros<arma::mat>(size, size);
+  arma::vec d = arma::zeros<arma::vec>(size);
+  arma::mat A0 = arma::zeros<arma::mat>(size, c_old.n_elem);
+  arma::vec b0 = arma::zeros<arma::vec>(c_old.n_elem);
+	for (int i = 0; i < sample; i++) {
+		if (delta[i] == 1) {
+      D += s2.slice(i)/s0(i) - s1.row(i).t() * s1.row(i) / (s0(i) * s0(i));
+      d += matrix.row(i).t() - s1.row(i).t() / s0(i);
+ 		}
+	}
+  // fixing c: no change is allowed in delta c
+  A0.rows(a_old.n_elem, size - 1).eye();
+  b0.tail(c_old.n_elem).fill(0);
+  
+  //cout << "paramters in QP" << endl;
+    
+  // call solve_qp to solve the quadratic programming problem
+  List sol = solve_qp(D, d, A0, b0, c_old.n_elem);
+  arma::vec increase = as<arma::vec>(sol["solution"]);
+
+  // return increase
+  return increase;
+/*  return Rcpp::List::create(Rcpp::Named("D") = D,
+                            Rcpp::Named("s0") = s0,
+                            Rcpp::Named("s1") = s1,
+                            Rcpp::Named("s2") = s2,
+                            Rcpp::Named("increase") = increase);
+*/
+}
+
+// [[Rcpp::depends("RcppArmadillo")]]
+// [[Rcpp::export]]
+arma::vec opt_a_compare(const arma::vec& a_old, const arma::vec& A, const arma::mat& X, 
+                        const arma::vec& delta, const arma::vec& tobs){
+  // initialization
+  int sample = delta.n_elem;
+  int size = a_old.n_elem;
+  arma::vec param = a_old;
+  arma::mat matrix = X;
+  
+  arma::vec s0 = arma::zeros<arma::vec>(sample);
+  arma::mat s1 = arma::zeros<arma::mat>(sample, size);
+  arma::cube s2 = arma::zeros<arma::cube>(size, size, sample);
+  for (int j = 0; j < sample; j++) {
+    double temp = exp(arma::as_scalar(matrix.row(j) * param));
+    for (int i = 0; i < sample; i++) {
+      if ((delta(i) == 1) && (tobs(j) >= tobs(i))) {
+        s0(i) += temp;
+    		s1.row(i) += temp * matrix.row(j);
+        s2.slice(i) += temp * matrix.row(j).t() * matrix.row(j);
+      }
+    }
+  }
+  
+ // cout << "s0-s2" << endl;
+  
+  // create D, d, A0, b0 to be used in the solve.qp 
+  // the problem is of the format min (1/2b^tDb - d^tb) s.t. (A0^tb >= b0)
+  arma::mat D = arma::zeros<arma::mat>(size, size);
+  arma::vec d = arma::zeros<arma::vec>(size);
+  for (int i = 0; i < sample; i++) {
+		if (delta[i] == 1) {
+      D += s2.slice(i)/s0(i) - s1.row(i).t() * s1.row(i) / (s0(i) * s0(i));
+      d += matrix.row(i).t() - s1.row(i).t() / s0(i);
+ 		}
+	}
+  
+  arma::vec increase = arma::solve(D, d);
+  
+  // return increase
+  return increase;
+/*  return Rcpp::List::create(Rcpp::Named("D") = D,
+                            Rcpp::Named("s0") = s0,
+                            Rcpp::Named("s1") = s1,
+                            Rcpp::Named("s2") = s2,
+                            Rcpp::Named("increase") = increase);
+*/
+}
+
+
+// [[Rcpp::depends("RcppArmadillo")]]
+// [[Rcpp::export]]
+arma::vec opt_c(const arma::vec& c_old, 
+                const arma::mat& bs, const arma::mat& bs_der, 
+                const arma::vec& A, const arma::mat& X, 
+                const arma::vec& delta, const arma::vec& tobs,
+                const double& stable){
+  // initialization
+  int sample = delta.n_elem;
+  int size = c_old.n_elem;
+  arma::vec param = c_old;
+  arma::mat matrix(sample, size);
+  for (int i = 0; i < size; i++){
+    matrix.col(i) = bs.col(i) % A;
+  }  
+  Rcpp::Environment quadprog("package:quadprog");
+  Rcpp::Function solve_qp = quadprog["solve.QP"];
+  
+  // so, s1, s2
+  arma::vec s0 = arma::zeros<arma::vec>(sample);
+  arma::mat s1 = arma::zeros<arma::mat>(sample, size);
+  arma::cube s2 = arma::zeros<arma::cube>(size, size, sample);
+  for (int j = 0; j < sample; j++) {
+    double temp = exp(arma::as_scalar(matrix.row(j) * param));
+    for (int i = 0; i < sample; i++) {
+      if ((delta(i) == 1) && (tobs(j) >= tobs(i))) {
+        s0(i) += temp;
+  			s1.row(i) += temp * matrix.row(j);
+        s2.slice(i) += temp * matrix.row(j).t() * matrix.row(j);
+      }
+    }
+  }
+  
+  // create D, d, A0, b0 to be used in the solve.qp 
+  // the problem is of the format min (1/2b^tDb - d^tb) s.t. (A0^tb >= b0)
+  arma::mat D = arma::zeros<arma::mat>(size, size);
+  arma::vec d = arma::zeros<arma::vec>(size);
+  arma::mat A0 = arma::zeros<arma::mat>(size, bs_der.n_rows + 2 * size);
+  arma::vec b0 = arma::zeros<arma::vec>(bs_der.n_rows + 2 * size);
+	for (int i = 0; i < sample; i++) {
+		if (delta[i] == 1) {
+      D += s2.slice(i)/s0(i) - s1.row(i).t() * s1.row(i) / (s0(i) * s0(i));
+      d += matrix.row(i).t() - s1.row(i).t() / s0(i);
+ 		}
+	}
+  // non decreasing
+  A0.cols(0, bs_der.n_rows - 1) = bs_der.t();
+  b0.head(bs_der.n_rows) = -bs_der * c_old;
+  // robustness
+  A0.cols(bs_der.n_rows, bs_der.n_rows + size - 1) = arma::eye(size, size);
+  A0.cols(bs_der.n_rows + size, bs_der.n_rows + 2 * size - 1) = 
+                                                    -arma::eye(size, size);
+  b0.tail(2 * size).fill(-stable);
+  b0.subvec(bs_der.n_rows, bs_der.n_rows + size - 1) -= param;
+  b0.subvec(bs_der.n_rows + size, bs_der.n_rows + 2 * size - 1) += param;
+  
+  // call solve_qp to solve the quadratic programming problem
+  List sol = solve_qp(D, d, A0, b0);
+  arma::vec increase = as<arma::vec>(sol["solution"]);
+
+  // return increase
+  return increase;
+/*  return Rcpp::List::create(Rcpp::Named("D") = D,
+                            Rcpp::Named("s0") = s0,
+                            Rcpp::Named("s1") = s1,
+                            Rcpp::Named("s2") = s2,
+                            Rcpp::Named("increase") = increase);
+*/
+}
+
+// no stable parameter for gamma 
+// [[Rcpp::depends("RcppArmadillo")]]
+// [[Rcpp::export]]
+arma::vec opt_c_us(const arma::vec& c_old, 
+                const arma::mat& bs, const arma::mat& bs_der, 
+                const arma::vec& A, const arma::mat& X, 
+                const arma::vec& delta, const arma::vec& tobs,
+                const double& stable){
+  // initialization
+  int sample = delta.n_elem;
+  int size = c_old.n_elem;
+  arma::vec param = c_old;
+  arma::mat matrix(sample, size);
+  for (int i = 0; i < size; i++){
+    matrix.col(i) = bs.col(i) % A;
+  }  
+  Rcpp::Environment quadprog("package:quadprog");
+  Rcpp::Function solve_qp = quadprog["solve.QP"];
+  
+  // so, s1, s2
+  arma::vec s0 = arma::zeros<arma::vec>(sample);
+  arma::mat s1 = arma::zeros<arma::mat>(sample, size);
+  arma::cube s2 = arma::zeros<arma::cube>(size, size, sample);
+  for (int j = 0; j < sample; j++) {
+    double temp = exp(arma::as_scalar(matrix.row(j) * param));
+    for (int i = 0; i < sample; i++) {
+      if ((delta(i) == 1) && (tobs(j) >= tobs(i))) {
+        s0(i) += temp;
+    		s1.row(i) += temp * matrix.row(j);
+        s2.slice(i) += temp * matrix.row(j).t() * matrix.row(j);
+      }
+    }
+  }
+  
+  // create D, d, A0, b0 to be used in the solve.qp 
+  // the problem is of the format min (1/2b^tDb - d^tb) s.t. (A0^tb >= b0)
+  arma::mat D = arma::zeros<arma::mat>(size, size);
+  arma::vec d = arma::zeros<arma::vec>(size);
+  arma::mat A0 = arma::zeros<arma::mat>(size, bs_der.n_rows);
+  arma::vec b0 = arma::zeros<arma::vec>(bs_der.n_rows);
+	for (int i = 0; i < sample; i++) {
+		if (delta[i] == 1) {
+      D += s2.slice(i)/s0(i) - s1.row(i).t() * s1.row(i) / (s0(i) * s0(i));
+      d += matrix.row(i).t() - s1.row(i).t() / s0(i);
+ 		}
+	}
+  // non decreasing
+  A0.cols(0, bs_der.n_rows - 1) = bs_der.t();
+  b0.head(bs_der.n_rows) = -bs_der * c_old;
+    
+  // call solve_qp to solve the quadratic programming problem
+  List sol = solve_qp(D, d, A0, b0);
+  arma::vec increase = as<arma::vec>(sol["solution"]);
+
+  // return increase
+  return increase;
+/*  return Rcpp::List::create(Rcpp::Named("D") = D,
+                            Rcpp::Named("s0") = s0,
+                            Rcpp::Named("s1") = s1,
+                            Rcpp::Named("s2") = s2,
+                            Rcpp::Named("increase") = increase);
+*/
+}
+
+
+// no non-decreasing requirement for psi 
+// [[Rcpp::depends("RcppArmadillo")]]
+// [[Rcpp::export]]
+arma::vec opt_c_compare(const arma::vec& c_old, 
+                const arma::mat& bs, const arma::mat& bs_der, 
+                const arma::vec& A, const arma::mat& X, 
+                const arma::vec& delta, const arma::vec& tobs, 
+                const double& stable){
+  // initialization
+  int sample = delta.n_elem;
+  int size = c_old.n_elem;
+  arma::vec param = c_old;
+  arma::mat matrix(sample, size);
+  for (int i = 0; i < size; i++){
+    matrix.col(i) = bs.col(i) % A;
+  }  
+  
+  // so, s1, s2
+  arma::vec s0 = arma::zeros<arma::vec>(sample);
+  arma::mat s1 = arma::zeros<arma::mat>(sample, size);
+  arma::cube s2 = arma::zeros<arma::cube>(size, size, sample);
+  for (int j = 0; j < sample; j++) {
+    double temp = exp(arma::as_scalar(matrix.row(j) * param));
+    for (int i = 0; i < sample; i++) {
+      if ((delta(i) == 1) && (tobs(j) >= tobs(i))) {
+        s0(i) += temp;
+    		s1.row(i) += temp * matrix.row(j);
+        s2.slice(i) += temp * matrix.row(j).t() * matrix.row(j);
+      }
+    }
+  }
+  
+  // create D, d,
+  // the problem is of the format min (1/2b^tDb - d^tb)
+  arma::mat D = arma::zeros<arma::mat>(size, size);
+  arma::vec d = arma::zeros<arma::vec>(size);
+ 	for (int i = 0; i < sample; i++) {
+		if (delta[i] == 1) {
+      D += s2.slice(i)/s0(i) - s1.row(i).t() * s1.row(i) / (s0(i) * s0(i));
+      d += matrix.row(i).t() - s1.row(i).t() / s0(i);
+ 		}
+	}
+ 
+  arma::vec increase = arma::solve(D, d);
+  
+  // return increase
+  return increase;
+/*  return Rcpp::List::create(Rcpp::Named("D") = D,
+                            Rcpp::Named("s0") = s0,
+                            Rcpp::Named("s1") = s1,
+                            Rcpp::Named("s2") = s2,
+                            Rcpp::Named("increase") = increase);
+*/
+}
+
+// adding identifiablity requirements by asking psi(0) = 0
+// stable version by replacing the equality constraint by two inequalities
+
+// [[Rcpp::depends("RcppArmadillo")]]
+// [[Rcpp::export]]
+arma::vec opt_c_id(const arma::vec& c_old, 
+                const arma::mat& bs, const arma::mat& bs_der, 
+                const arma::vec& A, const arma::mat& X, 
+                const arma::vec& delta, const arma::vec& tobs,
+                const double& stable, const arma::vec& at0){
+  // initialization
+  int sample = delta.n_elem;
+  int size = c_old.n_elem;
+  arma::vec param = c_old;
+  arma::mat matrix(sample, size);
+  for (int i = 0; i < size; i++){
+    matrix.col(i) = bs.col(i) % A;
+  }  
+  Rcpp::Environment quadprog("package:quadprog");
+  Rcpp::Function solve_qp = quadprog["solve.QP"];
+  
+  // so, s1, s2
+  arma::vec s0 = arma::zeros<arma::vec>(sample);
+  arma::mat s1 = arma::zeros<arma::mat>(sample, size);
+  arma::cube s2 = arma::zeros<arma::cube>(size, size, sample);
+  for (int j = 0; j < sample; j++) {
+    double temp = exp(arma::as_scalar(matrix.row(j) * param));
+    for (int i = 0; i < sample; i++) {
+      if ((delta(i) == 1) && (tobs(j) >= tobs(i))) {
+        s0(i) += temp;
+    		s1.row(i) += temp * matrix.row(j);
+        s2.slice(i) += temp * matrix.row(j).t() * matrix.row(j);
+      }
+    }
+  }
+  
+  // create D, d, A0, b0 to be used in the solve.qp 
+  // the problem is of the format min (1/2b^tDb - d^tb) s.t. (A0^tb >= b0)
+  arma::mat D = arma::zeros<arma::mat>(size, size);
+  arma::vec d = arma::zeros<arma::vec>(size);
+  for (int i = 0; i < sample; i++) {
+		if (delta[i] == 1) {
+      D += s2.slice(i)/s0(i) - s1.row(i).t() * s1.row(i) / (s0(i) * s0(i));
+      d += matrix.row(i).t() - s1.row(i).t() / s0(i);
+ 		}
+	}
+  arma::mat A0 = arma::zeros<arma::mat>(size, bs_der.n_rows + 2 * size + 2);
+  arma::vec b0 = arma::zeros<arma::vec>(bs_der.n_rows + 2 * size + 2);
+  // identifiability
+  double num = 1e-5;
+  A0.col(0) = at0;
+  A0.col(1) = -at0;
+  arma::vec at0_cp = at0;
+  b0(0) = -arma::sum(at0_cp%c_old) - num;
+  b0(1) = arma::sum(at0_cp%c_old) - num;
+  // non decreasing
+  A0.cols(2, bs_der.n_rows + 1) = bs_der.t();
+  b0.subvec(2, bs_der.n_rows + 1) = -bs_der * c_old;
+  // robustness
+  A0.cols(bs_der.n_rows + 2, bs_der.n_rows + size + 1) = arma::eye(size, size);
+  A0.cols(bs_der.n_rows + size + 2, bs_der.n_rows + 2 * size + 1) = 
+                                                    -arma::eye(size, size);
+  b0.tail(2 * size).fill(-stable);
+  b0.subvec(bs_der.n_rows + 2, bs_der.n_rows + size + 1) -= param;
+  b0.subvec(bs_der.n_rows + size + 2, bs_der.n_rows + 2 * size + 1) += param;
+  
+  // call solve_qp to solve the quadratic programming problem
+  List sol = solve_qp(D, d, A0, b0);
+  arma::vec increase = as<arma::vec>(sol["solution"]);
+
+  // return increase
+  return increase;
+/*  return Rcpp::List::create(Rcpp::Named("A0") = A0,
+                            Rcpp::Named("b0") = b0,
+                            Rcpp::Named("D") = D,
+                            Rcpp::Named("d") = d);
+*/
+}
+
+
+// no approximation for the equality constraint
+// [[Rcpp::depends("RcppArmadillo")]]
+// [[Rcpp::export]]
+arma::vec opt_c_id_ori(const arma::vec& c_old, 
+                const arma::mat& bs, const arma::mat& bs_der, 
+                const arma::vec& A, const arma::mat& X, 
+                const arma::vec& delta, const arma::vec& tobs,
+                const double& stable, const arma::vec& at0){
+  // initialization
+  int sample = delta.n_elem;
+  int size = c_old.n_elem;
+  arma::vec param = c_old;
+  arma::mat matrix(sample, size);
+  for (int i = 0; i < size; i++){
+    matrix.col(i) = bs.col(i) % A;
+  }  
+  Rcpp::Environment quadprog("package:quadprog");
+  Rcpp::Function solve_qp = quadprog["solve.QP"];
+  
+  // so, s1, s2
+  arma::vec s0 = arma::zeros<arma::vec>(sample);
+  arma::mat s1 = arma::zeros<arma::mat>(sample, size);
+  arma::cube s2 = arma::zeros<arma::cube>(size, size, sample);
+  for (int j = 0; j < sample; j++) {
+    double temp = exp(arma::as_scalar(matrix.row(j) * param));
+    for (int i = 0; i < sample; i++) {
+      if ((delta(i) == 1) && (tobs(j) >= tobs(i))) {
+        s0(i) += temp;
+      	s1.row(i) += temp * matrix.row(j);
+        s2.slice(i) += temp * matrix.row(j).t() * matrix.row(j);
+      }
+    }
+  }
+  
+  // create D, d, A0, b0 to be used in the solve.qp 
+  // the problem is of the format min (1/2b^tDb - d^tb) s.t. (A0^tb >= b0)
+  arma::mat D = arma::zeros<arma::mat>(size, size);
+  arma::vec d = arma::zeros<arma::vec>(size);
+  for (int i = 0; i < sample; i++) {
+		if (delta[i] == 1) {
+      D += s2.slice(i)/s0(i) - s1.row(i).t() * s1.row(i) / (s0(i) * s0(i));
+      d += matrix.row(i).t() - s1.row(i).t() / s0(i);
+ 		}
+	}
+
+  arma::mat A0 = arma::zeros<arma::mat>(size, bs_der.n_rows + 2 * size + 1);
+  arma::vec b0 = arma::zeros<arma::vec>(bs_der.n_rows + 2 * size + 1);
+  // identifiability
+  A0.col(0) = at0;
+  arma::vec at0_cp = at0;
+  b0(0) = -arma::sum(at0_cp%c_old);
+  // non decreasing
+  A0.cols(1, bs_der.n_rows) = bs_der.t();
+  b0.subvec(1, bs_der.n_rows) = -bs_der * c_old;
+  // robustness
+  A0.cols(bs_der.n_rows + 1, bs_der.n_rows + size) = arma::eye(size, size);
+  A0.cols(bs_der.n_rows + size + 1, bs_der.n_rows + 2 * size) = 
+                                                    -arma::eye(size, size);
+  b0.tail(2 * size).fill(-stable);
+  b0.subvec(bs_der.n_rows + 1, bs_der.n_rows + size) -= param;
+  b0.subvec(bs_der.n_rows + size + 1, bs_der.n_rows + 2 * size) += param;
+
+  // call solve_qp to solve the quadratic programming problem
+  List sol = solve_qp(D, d, A0, b0, 1);
+  arma::vec increase = as<arma::vec>(sol["solution"]);
+
+  return increase;
+
 }
